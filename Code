@@ -1,0 +1,352 @@
+// frontend/src/App.js
+import React, { useState, useEffect } from ‘react’;
+import axios from ‘axios’;
+import {
+LineChart,
+Line,
+AreaChart,
+Area,
+BarChart,
+Bar,
+PieChart,
+Pie,
+Cell,
+XAxis,
+YAxis,
+CartesianGrid,
+Tooltip,
+Legend,
+ResponsiveContainer
+} from ‘recharts’;
+import ‘./App.css’;
+
+const API_BASE = process.env.REACT_APP_API_BASE || ‘http://localhost:3001/api’;
+
+// Color scheme for cloud providers
+const PROVIDER_COLORS = {
+AWS: ‘#FF9500’,
+Azure: ‘#0078D4’,
+GCP: ‘#4285F4’
+};
+
+const Dashboard = () => {
+const [metrics, setMetrics] = useState(null);
+const [recommendations, setRecommendations] = useState(null);
+const [kpis, setKpis] = useState(null);
+const [loading, setLoading] = useState(true);
+const [selectedView, setSelectedView] = useState(‘overview’);
+const [lastUpdate, setLastUpdate] = useState(new Date());
+
+useEffect(() => {
+const fetchData = async () => {
+try {
+const [metricsRes, recommendationsRes, kpisRes] = await Promise.all([
+axios.get(`${API_BASE}/metrics/overview`),
+axios.get(`${API_BASE}/optimization/recommendations`),
+axios.get(`${API_BASE}/kpis/business`)
+]);
+
+```
+    setMetrics(metricsRes.data);
+    setRecommendations(recommendationsRes.data);
+    setKpis(kpisRes.data);
+    setLastUpdate(new Date());
+  } catch (error) {
+    console.error('Failed to fetch data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+fetchData();
+const interval = setInterval(fetchData, 60000); // Update every minute
+return () => clearInterval(interval);
+```
+
+}, []);
+
+if (loading) {
+return (
+<div className="loading-container">
+<div className="spinner"></div>
+<p>Loading observability data…</p>
+</div>
+);
+}
+
+return (
+<div className="dashboard">
+<header className="dashboard-header">
+<h1>Enterprise CloudOps Observability Platform</h1>
+<div className="header-controls">
+<div className="view-selector">
+{[‘overview’, ‘optimization’, ‘kpis’, ‘partners’].map(view => (
+<button
+key={view}
+className={`view-btn ${selectedView === view ? 'active' : ''}`}
+onClick={() => setSelectedView(view)}
+>
+{view.charAt(0).toUpperCase() + view.slice(1)}
+</button>
+))}
+</div>
+<div className="last-update">
+Last updated: {lastUpdate.toLocaleTimeString()}
+</div>
+</div>
+</header>
+
+```
+  <main className="dashboard-main">
+    {selectedView === 'overview' && <OverviewView metrics={metrics} />}
+    {selectedView === 'optimization' && <OptimizationView recommendations={recommendations} />}
+    {selectedView === 'kpis' && <KPIsView kpis={kpis} />}
+    {selectedView === 'partners' && <PartnersView />}
+  </main>
+</div>
+```
+
+);
+};
+
+const OverviewView = ({ metrics }) => {
+if (!metrics) return <div>No data available</div>;
+
+const { summary, providers } = metrics;
+
+// Prepare chart data
+const costData = providers.map(provider => ({
+name: provider.provider,
+cost: provider.metrics.cost_current_month,
+instances: provider.metrics.ec2_instances || provider.metrics.vm_instances,
+health: provider.health_score
+}));
+
+const utilizationData = providers.map(provider => ({
+name: provider.provider,
+cpu: provider.metrics.cpu_utilization,
+memory: provider.metrics.memory_usage
+}));
+
+return (
+<div className="overview-view">
+{/* Summary Cards */}
+<div className="summary-cards">
+<div className="card">
+<h3>Total Monthly Cost</h3>
+<div className="metric-value">${summary.total_monthly_cost.toLocaleString()}</div>
+<div className="metric-trend positive">↓ 12% from last month</div>
+</div>
+<div className="card">
+<h3>Total Instances</h3>
+<div className="metric-value">{summary.total_instances}</div>
+<div className="metric-trend neutral">→ No change</div>
+</div>
+<div className="card">
+<h3>Health Score</h3>
+<div className="metric-value">{summary.average_health_score}%</div>
+<div className="metric-trend positive">↑ 5% improvement</div>
+</div>
+<div className="card">
+<h3>Active Alerts</h3>
+<div className="metric-value">{summary.active_alerts}</div>
+<div className="metric-trend positive">↓ 15% fewer alerts</div>
+</div>
+</div>
+
+```
+  {/* Charts */}
+  <div className="charts-grid">
+    <div className="chart-container">
+      <h3>Cost Distribution by Provider</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        <PieChart>
+          <Pie
+            data={costData}
+            cx="50%"
+            cy="50%"
+            labelLine={false}
+            label={({ name, value }) => `${name}: $${value.toLocaleString()}`}
+            outerRadius={80}
+            fill="#8884d8"
+            dataKey="cost"
+          >
+            {costData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={PROVIDER_COLORS[entry.name]} />
+            ))}
+          </Pie>
+          <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="chart-container">
+      <h3>Resource Utilization</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={utilizationData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="cpu" fill="#8884d8" name="CPU %" />
+          <Bar dataKey="memory" fill="#82ca9d" name="Memory %" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="chart-container full-width">
+      <h3>Health Scores by Provider</h3>
+      <ResponsiveContainer width="100%" height={200}>
+        <AreaChart data={costData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis domain={[0, 100]} />
+          <Tooltip />
+          <Area type="monotone" dataKey="health" stroke="#8884d8" fill="#8884d8" />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+
+  {/* Provider Details */}
+  <div className="provider-details">
+    <h3>Provider Details</h3>
+    <div className="provider-cards">
+      {providers.map(provider => (
+        <div key={provider.provider} className="provider-card">
+          <div className="provider-header">
+            <h4>{provider.provider}</h4>
+            <div className={`health-indicator ${provider.health_score > 90 ? 'excellent' : provider.health_score > 80 ? 'good' : 'warning'}`}>
+              {provider.health_score}%
+            </div>
+          </div>
+          <div className="provider-metrics">
+            <div className="metric">
+              <span>Instances:</span>
+              <span>{provider.metrics.ec2_instances || provider.metrics.vm_instances}</span>
+            </div>
+            <div className="metric">
+              <span>CPU:</span>
+              <span>{provider.metrics.cpu_utilization}%</span>
+            </div>
+            <div className="metric">
+              <span>Memory:</span>
+              <span>{provider.metrics.memory_usage}%</span>
+            </div>
+            <div className="metric">
+              <span>Cost:</span>
+              <span>${provider.metrics.cost_current_month.toLocaleString()}</span>
+            </div>
+          </div>
+          {provider.alerts.length > 0 && (
+            <div className="alerts">
+              <h5>Active Alerts:</h5>
+              {provider.alerts.map((alert, idx) => (
+                <div key={idx} className={`alert ${alert.severity}`}>
+                  {alert.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
+```
+
+);
+};
+
+const OptimizationView = ({ recommendations }) => {
+if (!recommendations) return <div>No recommendations available</div>;
+
+const { total_potential_savings, recommendations: recs } = recommendations;
+
+return (
+<div className="optimization-view">
+<div className="optimization-header">
+<h2>Cost Optimization Recommendations</h2>
+<div className="total-savings">
+<span>Total Potential Savings:</span>
+<span className="savings-amount">${total_potential_savings.toLocaleString()}/month</span>
+</div>
+</div>
+
+```
+  <div className="recommendations-list">
+    {recs.map((rec, idx) => (
+      <div key={idx} className={`recommendation-card priority-${rec.priority}`}>
+        <div className="rec-header">
+          <h3>{rec.type.replace('_', ' ').toUpperCase()}</h3>
+          <div className="rec-savings">${rec.potential_savings.toLocaleString()}/month</div>
+        </div>
+        <div className="rec-body">
+          <p><strong>Provider:</strong> {rec.provider}</p>
+          <p><strong>Description:</strong> {rec.description}</p>
+          <p><strong>Recommended Action:</strong> {rec.action}</p>
+        </div>
+        <div className="rec-footer">
+          <span className={`priority-badge priority-${rec.priority}`}>
+            {rec.priority.toUpperCase()} PRIORITY
+          </span>
+          <button className="implement-btn">Implement</button>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+);
+};
+
+const KPIsView = ({ kpis }) => {
+if (!kpis) return <div>No KPI data available</div>;
+
+const { kpis: kpiData, trends } = kpis;
+
+return (
+<div className="kpis-view">
+<h2>Business KPIs & Performance</h2>
+
+```
+  <div className="kpi-sections">
+    <div className="kpi-section">
+      <h3>Service Level Agreements</h3>
+      <div className="kpi-cards">
+        <div className="kpi-card">
+          <div className="kpi-value">{kpiData.uptime_sla}%</div>
+          <div className="kpi-label">Uptime SLA</div>
+          <div className="kpi-trend positive">{trends.uptime_trend}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-value">{kpiData.mttr_minutes}m</div>
+          <div className="kpi-label">MTTR</div>
+          <div className="kpi-trend positive">{trends.mttr_trend}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-value">{kpiData.customer_satisfaction}/5</div>
+          <div className="kpi-label">Customer Satisfaction</div>
+          <div className="kpi-trend positive">+0.2</div>
+        </div>
+      </div>
+    </div>
+
+    <div className="kpi-section">
+      <h3>Financial Impact</h3>
+      <div className="kpi-cards">
+        <div className="kpi-card">
+          <div className="kpi-value">${kpiData.revenue_impact.current_month.toLocaleString()}</div>
+          <div className="kpi-label">Monthly Revenue</div>
+          <div className="kpi-trend positive">+8%</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-value">${kpiData.revenue_impact.downtime_cost_avoided.toLocaleString()}</div>
+          <div className="kpi-label">Downtime Cost Avoided</div>
+          <div className="kpi-trend positive">+25%</div>
+        </div>
+        <div className="kpi-card">
+          <div
+```
